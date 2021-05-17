@@ -46,7 +46,7 @@ if fl_indisponibilidade == "Sim":
 #Botao para iniciar a simulacao
 simule = st.sidebar.button('Pressione para simular')
 
-cenario = 'Figura 37'
+cenario = 'main'
 
 LOG_TELA = 0                #Ativa log em tela
 num_trens = 0               #Numero de trens criados
@@ -165,10 +165,7 @@ if simule:
         href = f'<a href="data:file/csv;base64,{b64}">Download CSV File</a> (Clique com botão direito para fazer o download das estatisticas da simulação selecionando "salvar link" como &lt;nome_do_arquivo.csv&gt;)'
         st.markdown(href, unsafe_allow_html=True)
 
-        
-        #variavel statist
-        statistics_df.to_csv(r'statistic_file_log', header=True, index=True, sep=',', mode='a')
-    
+   
     
     #Processo da unidade de controle
     def CCO(env):
@@ -270,7 +267,7 @@ if simule:
                     if analise_fluxo(prox_setor,num_setores,dir,id_trem) == 0:
                         ocupa = 0
                         
-                        if env.now > 1000:
+                        if env.now > fora_transitorio:
                             #Representacao de trem parado
                             setor_atual = prox_setor - dir
                             valores[id_trem-1].setor.append(setor_atual)
@@ -527,6 +524,7 @@ if simule:
     
     #Configurador da ferrovia
     def config_rail(env):
+        
         global ferrovia, ferrovia_travessao,num_setores
         printf("Criando pares de SBs da ferrovia...")
         
