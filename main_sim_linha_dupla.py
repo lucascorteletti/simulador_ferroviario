@@ -7,7 +7,6 @@ import streamlit as st
 import base64
 
 
-
 #Def pagina streamlit
 st.title('Bem vindo ao simulador ferroviario!')
 
@@ -22,6 +21,10 @@ fora_transitorio = st.sidebar.slider('Selecione o instante fora de regime transi
 
 #Quantidade de setores:
 num_setores = st.sidebar.slider('Selecione a quantidade de setores na ferrovia', 2,100)
+
+#Quantidade de trens: Trem0-Setor0-Subindo
+num_veiculos = st.sidebar.slider('Selecione a quantidade de trens na ferrovia', 2,10)
+origem_veiculos = st.sidebar.multiselect('Selecione a origem dos trens', ['Trem'+str(trem)+'-'+'Setor'+str(setor)+'-'+str(sentido) for trem in range(num_veiculos) for setor in range(num_setores) for sentido in ['Descendo','Subindo'] ] )
 
 #Utilizar efeito de aleatoridade no movimento do trem
 fl_aleatoriedade = st.sidebar.radio('Deseja aplicar efeito de aleatoriedade ao longo do movimento do trem?', ('Não', 'Sim'))
@@ -38,16 +41,14 @@ else:
 fl_indisponibilidade = st.sidebar.radio('Deseja tornar alguma linha da ferrovia indisponível em algum setor?', ('Não', 'Sim'))
 
 if fl_indisponibilidade == "Sim":
-    indisponiveis = st.sidebar.multiselect('Selecione os setores com indisponibilidade', [str(setor)+str(tipo) for setor in range(num_setores) for tipo in ['A','B']] )    
-
-#Selecao de extracao de arquivo de estatisticas da simulacao
-
+    indisponiveis = st.sidebar.multiselect('Selecione os setores com indisponibilidade', [str(setor)+str(tipo) for setor in range(num_setores) for tipo in ['A','B']] )
+else:
+    indisponiveis = []
 
 #Botao para iniciar a simulacao
 simule = st.sidebar.button('Pressione para simular')
 
 cenario = 'main'
-
 LOG_TELA = 0                #Ativa log em tela
 num_trens = 0               #Numero de trens criados
 CCO_queue = []              #Fila de requisições para liberação pelo CCO
@@ -134,9 +135,10 @@ if simule:
             .set_index(['nome']) \
             .apply(lambda x: x.apply(pd.Series).stack()) \
             .reset_index() \
-            .drop('level_1', 1)
+            .drop('level_1', 1) \
+            .rename(columns={'nome': 'Trem'})
                
-        figura = px.line(df, x="instante", y="setor", color='nome' )
+        figura = px.line(df, x="instante", y="setor", color='Trem' )
         
         return figura
         
@@ -561,10 +563,31 @@ if simule:
         ferrovia_linha[nu_setor]["LINHA"][tp_setor][FERR_RECURSO].request()
   
     
-   
-    env.process(trem(env=env,out=1,setor=0,dir=1,sb=-1))
-    env.process(trem(env=env,out=1,setor=0,dir=1,sb=-1))
-    env.process(trem(env=env,out=1,setor=0,dir=1,sb=-1))
+    #Dispoe processos dos trens  
+    for veiculo in origem_veiculos: #num_veiculos
+        #Trem0-Setor0-Subindo
+        
+        #Extracao do sentido
+        delimitador1 = veiculo.find('-',0) + 1
+        delimitador2 = veiculo.find('-',delimitador1)+1
+        
+        setor_inicio = veiculo.find('Setor') + 5
+        
+        setor_origem = int(veiculo[ setor_inicio:delimitador2-1 ])
+        sentido = veiculo[delimitador2+1:]
+        
+
+        
+        if sentido == "Subindo":
+            direcao = -1
+        else:
+            direcao = +1
+        
+        env.process(trem(env=env,out=1,setor=setor_origem,dir=direcao,sb=-1))
+        #env.process(trem(env=env,out=1,setor=0,dir=1,sb=-1))
+
+        
+        
     
     #Executa simulacao:  
     ult_now = -1
