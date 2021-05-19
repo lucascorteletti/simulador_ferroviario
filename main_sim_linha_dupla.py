@@ -7,7 +7,7 @@ import streamlit as st
 import base64
 
 
-#Def pagina streamlit
+#Definicao pagina streamlit
 st.title('Bem vindo ao simulador ferroviario!')
 
 st.markdown('Desenvolvida com SimPy, esta aplicação permite simular ferrovias do tipo dupla e singela.\
@@ -48,7 +48,9 @@ else:
 #Botao para iniciar a simulacao
 simule = st.sidebar.button('Pressione para simular')
 
-cenario = 'main'
+
+
+
 LOG_TELA = 0                #Ativa log em tela
 num_trens = 0               #Numero de trens criados
 CCO_queue = []              #Fila de requisições para liberação pelo CCO
@@ -156,10 +158,8 @@ if simule:
                      .groupby('Trem').agg({'THP':'sum'})
                      )
          
-        cenario_column = [cenario for linha in range(len(statistics_df))]
-        transit_medio_column = [transit_medio for linha in range(len(statistics_df))]
-        
-        statistics_df['Cenario'] = cenario_column
+
+        transit_medio_column = [transit_medio for linha in range(len(statistics_df))]      
         statistics_df['Transit_Time_Medio_Geral'] = transit_medio_column
         
         csv = statistics_df.to_csv(index=False)
@@ -584,7 +584,6 @@ if simule:
             direcao = +1
         
         env.process(trem(env=env,out=1,setor=setor_origem,dir=direcao,sb=-1))
-        #env.process(trem(env=env,out=1,setor=0,dir=1,sb=-1))
 
         
         
