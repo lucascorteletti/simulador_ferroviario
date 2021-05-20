@@ -53,10 +53,10 @@ simule = st.sidebar.button('Pressione para simular')
 
 LOG_TELA = 0                #Ativa log em tela
 num_trens = 0               #Numero de trens criados
-CCO_queue = []              #Fila de requisições para liberação pelo CCO
+fila_unidade_controle = []  #Fila de requisições para liberação pelo UnidadeControle
 ferrovia_linha = []         #Estrutura de sb's na ferrovia 
 ferrovia_travessao = []     #Estrutura de travessao ferrovia
-valores = []                #Valores para plotagem em gráfico
+dados = []                #dados para plotagem em gráfico
 registros_transit_time = []
 
 
@@ -100,8 +100,8 @@ df_criterios = pd.DataFrame(
              'Indisponivel',
              'Trem_mesmo_sent', 
              'Trem_sent_oposto', 
-             'X',
-             'Break')
+             'Iterador',
+             'Flag_break')
 )
 
 if simule:
@@ -128,11 +128,11 @@ if simule:
             }.get(movimento, 0.0)
         
             
-    def fim_simulation():
+    def GerarPlotagem():
         
         global ferrovia_linha, df
         
-        df = pd.DataFrame(data=valores, columns=('setor','instante', 'thp','nome')) \
+        df = pd.DataFrame(data=dados, columns=('setor','instante', 'thp','nome')) \
             .drop(columns = ['thp']) \
             .set_index(['nome']) \
             .apply(lambda x: x.apply(pd.Series).stack()) \
@@ -145,14 +145,14 @@ if simule:
         return figura
         
     
-    def gerar_estatisticas():
+    def GerarEstatisticas():
         
         global statistics_df, href
         
         transit_medio = sum(registros_transit_time)/len(registros_transit_time)
         
         statistics_df = (
-                      pd.DataFrame(data=valores, columns=('Setor', 'Instante', 'THP','Trem'))
+                      pd.DataFrame(data=dados, columns=('Setor', 'Instante', 'THP','Trem'))
                      .drop(columns = ['Setor', 'Instante'])
                      .explode('THP')
                      .groupby('Trem').agg({'THP':'sum'})
@@ -167,58 +167,97 @@ if simule:
         href = f'<a href="data:file/csv;base64,{b64}">Download CSV File</a> (Clique com botão direito para fazer o download das estatisticas da simulação selecionando "salvar link" como &lt;nome_do_arquivo.csv&gt;)'
         st.markdown(href, unsafe_allow_html=True)
 
+
+
+    def ArmazenarPosicao(id_trem, setor):
+        dados[id_trem-1].setor.append(setor)
+    
+    
+    def ArmazenarInstante(id_trem, env):
+        dados[id_trem-1].instante.append(env.now)
+        
    
+    def AtualizarRequisicoes():
+        global unidade_controle_event
+        if not unidade_controle_event.triggered:
+            unidade_controle_event.succeed()
+
+
+
+    #Configurador da ferrovia
+    def ConfigurarFerrovia(env):
+        
+        global ferrovia, ferrovia_travessao,num_setores
+        printf("Criando pares de SBs da ferrovia...")
+        
+        for setor in range(num_setores):
+            data = dict()
+            data2 = dict()
+            #id = id da seção da bloqueio
+            #sb = coleção das duas SBs da seção
+            data2.update(id = setor,\
+                         TRAVESSAO = [[simpy.Resource(env,1),0,0,0],\
+                                    [simpy.Resource(env,1),0,0,0],\
+                                    [simpy.Resource(env,1),0,0,0]])        
+            data.update(id = setor, \
+                        LINHA = [[simpy.Resource(env,1),0,0,0],\
+                              [simpy.Resource(env,1),0,0,0]])
+            ferrovia_linha.append(data)
+            ferrovia_travessao.append(data2)
+        printf("Foram criados %s pares de SBs!" % (num_setores))    
+    
+    
+    
     
     #Processo da unidade de controle
-    def CCO(env):
-        global CCO_event,ferrovia,num_setores,trem_pass
+    def UnidadeControle(env):
+        global unidade_controle_event,ferrovia,num_setores
         
-        def analise_fluxo(prox_setor,num_setores,dir,id_trem):
-                    
+        def AnalisarFluxo(prox_setor,num_setores,dir,id_trem):
+            
+            #Variavel do status de fluxo: {0:fechado, 1:aberto}
             fluxo_aberto = 1
-            aux = prox_setor
-                                    
+            
+            #Variavel auxiliar de identificacao do proximo setor
+            aux_prox_setor = prox_setor                                    
             contador = 1
             
             #Setor seguinte inteiro ocupado
-            if ferrovia_linha[aux]["LINHA"][SB_A][FERR_RECURSO].count == 1 and \
-                ferrovia_linha[aux]["LINHA"][SB_B][FERR_RECURSO].count == 1:
-                print("Bloqueia trem %d " % (id_trem))
+            if ferrovia_linha[aux_prox_setor]["LINHA"][SB_A][FERR_RECURSO].count == 1 and \
+                ferrovia_linha[aux_prox_setor]["LINHA"][SB_B][FERR_RECURSO].count == 1:
+                printf("Bloqueia trem %d " % (id_trem))
                 fluxo_aberto = 0
                 return fluxo_aberto
             
             #Analise de deferimento
-            if fluxo_aberto == 1 and aux>=0 and aux <= num_setores:#-1:         
+            if fluxo_aberto == 1 and aux_prox_setor>=0 and aux_prox_setor <= num_setores:         
                 while contador >= 1:
                     
                     #Contabilizar as quatro variáveis
-                    qtd_linha_disponivel = sum(1 for setor in [ ferrovia_linha[aux]["LINHA"][SB_A], ferrovia_linha[aux]["LINHA"][SB_B] ] if setor[FERR_RECURSO].count== 0)
-                    qtd_linha_indisponivel = sum(1 for setor in [ ferrovia_linha[aux]["LINHA"][SB_A], ferrovia_linha[aux]["LINHA"][SB_B] ] if setor[FERR_RECURSO].count== 1 and setor[FERR_TREM] == 0)
-                    qtd_tren_mesmo_sentido = sum(1 for setor in [ ferrovia_linha[aux]["LINHA"][SB_A], ferrovia_linha[aux]["LINHA"][SB_B] ] if setor[FERR_RECURSO].count== 1 and setor[FERR_DIR] == dir)
-                    qtd_tren_sentido_oposto = sum(1 for setor in [ ferrovia_linha[aux]["LINHA"][SB_A], ferrovia_linha[aux]["LINHA"][SB_B] ] if setor[FERR_RECURSO].count== 1 and setor[FERR_DIR] != dir and setor[FERR_DIR] != 0)
+                    qtd_linha_disponivel = sum(1 for setor in [ ferrovia_linha[aux_prox_setor]["LINHA"][SB_A], ferrovia_linha[aux_prox_setor]["LINHA"][SB_B] ] if setor[FERR_RECURSO].count== 0)
+                    qtd_linha_indisponivel = sum(1 for setor in [ ferrovia_linha[aux_prox_setor]["LINHA"][SB_A], ferrovia_linha[aux_prox_setor]["LINHA"][SB_B] ] if setor[FERR_RECURSO].count== 1 and setor[FERR_TREM] == 0)
+                    qtd_trem_mesmo_sentido = sum(1 for setor in [ ferrovia_linha[aux_prox_setor]["LINHA"][SB_A], ferrovia_linha[aux_prox_setor]["LINHA"][SB_B] ] if setor[FERR_RECURSO].count== 1 and setor[FERR_DIR] == dir)
+                    qtd_trem_sentido_oposto = sum(1 for setor in [ ferrovia_linha[aux_prox_setor]["LINHA"][SB_A], ferrovia_linha[aux_prox_setor]["LINHA"][SB_B] ] if setor[FERR_RECURSO].count== 1 and setor[FERR_DIR] != dir and setor[FERR_DIR] != 0)
                     
                     
                     #Buscar na tabela o incremento e o break:
                     try:
-                        f1 = df_criterios[df_criterios['Disponivel'] == qtd_linha_disponivel]
-                        f2 = f1[f1['Indisponivel'] == qtd_linha_indisponivel]
-                        f3 = f2[f2['Trem_mesmo_sent'] == qtd_tren_mesmo_sentido]
-                        f4 = f3[f3['Trem_sent_oposto'] == qtd_tren_sentido_oposto]
-                        var_x = int(f4.X)
-                        var_break = int(f4.Break)
+                        criterio_decisao = df_criterios.query('Disponivel == qtd_linha_disponivel & Indisponivel==qtd_linha_indisponivel & Trem_mesmo_sent==qtd_trem_mesmo_sentido & Trem_sent_oposto ==qtd_trem_sentido_oposto')
+                        aux_iterador = int(criterio_decisao.Iterador)
+                        aux_break = int(criterio_decisao.Flag_break)
                     except:
                         printf('Erro de lookup em criterios')
                         break
                     
             
                     #Atualizar o break
-                    if var_break == 1:
+                    if aux_break == 1:
                         fluxo_aberto = 0
                         break
                     
                     #Atualizar o incremento
-                    elif var_break == 0:
-                        contador = contador + var_x
+                    elif aux_break == 0:
+                        contador = contador + aux_iterador
                         
                     #Espaco livre ao progresso
                     if contador <= 0: 
@@ -226,15 +265,15 @@ if simule:
                         break
                 
                     #Loop para proxima verificacao
-                    aux = aux + dir
+                    aux_prox_setor = aux_prox_setor + dir
                     
                     #Chegou na mina ou no porto
-                    if aux == -1 or aux == num_setores:
+                    if aux_prox_setor == -1 or aux_prox_setor == num_setores:
                         fluxo_aberto = 1
                         break
                                     
                     #Verificacao de adesao a estrututura ferrea
-                    if aux >= num_setores or aux == -1:
+                    if aux_prox_setor >= num_setores or aux_prox_setor == -1:
                         fluxo_aberto = 0
                         break
                     
@@ -243,16 +282,16 @@ if simule:
         
         while(True):
             
-            #Cria próximo evento "CCO_event"
-            CCO_event = env.event() 
+            #Cria próximo evento "unidade_controle_event"
+            unidade_controle_event = env.event() 
            
-            #Aguarda disparar evento "CCO_event"
-            yield CCO_event
+            #Aguarda disparar evento "unidade_controle_event"
+            yield unidade_controle_event
             
             #Verifica cada trem do sistema a condição de avançar
             remove = []
             
-            for requisicao in CCO_queue:
+            for requisicao in fila_unidade_controle:
                 id_trem = requisicao[0]
                 evento_liberacao = requisicao[1]["evento"]
                 prox_setor = requisicao[1]["prox_setor"]
@@ -266,14 +305,15 @@ if simule:
                 #Limita ao contexto do trem em movimento
                 if prox_setor<num_setores and prox_setor>=0:
                                         
-                    if analise_fluxo(prox_setor,num_setores,dir,id_trem) == 0:
+                    if AnalisarFluxo(prox_setor,num_setores,dir,id_trem) == 0:
                         ocupa = 0
                         
                         if env.now > fora_transitorio:
                             #Representacao de trem parado
                             setor_atual = prox_setor - dir
-                            valores[id_trem-1].setor.append(setor_atual)
-                            valores[id_trem-1].instante.append(env.now)
+                            ArmazenarPosicao(id_trem, setor_atual)
+                            ArmazenarInstante(id_trem, env)
+
                             
                     else:
                         ocupa = 1
@@ -300,22 +340,17 @@ if simule:
                     
                         #Libera trem
                         evento_liberacao.succeed([sb])
-                        remove.append(CCO_queue.index(requisicao))
+                        remove.append(fila_unidade_controle.index(requisicao))
                     
                             
             #Remocao da solicitacao a fila de analise
             for index in sorted(remove, reverse=True):
-                del CCO_queue[index]
-                  
-    def Trigger_CCO():
-        global CCO_event
-        if not CCO_event.triggered:
-            CCO_event.succeed()
-            
+                del fila_unidade_controle[index]
+                              
         
     #Processo da entidade "trem"
-    def trem(env, out, setor, sb, dir):
-        global num_trens, CCO_queue,valores,origem_trens
+    def Trem(env, out, setor, sb, dir):
+        global num_trens, fila_unidade_controle,dados,origem_trens
       
         #sb: seção de bloqueio que o trem está localizado
         #dir: direção em que o trem está seguindo {-1,1}
@@ -331,9 +366,9 @@ if simule:
         chegada_porto = - 1
         
         
-        valores.append(dados_trem([],[],[],"Trem_#" + str(id_trem)))
+        dados.append(dados_trem([],[],[],"Trem_#" + str(id_trem)))
         printf("   Trem #%s criado " % (id_trem) )
-        Trigger_CCO() 
+        AtualizarRequisicoes() 
         
         while(True):
             #Instancia o trem na ferrovia, coleta primeiro setor
@@ -346,17 +381,17 @@ if simule:
             if(out==0 and prox_setor>=0 and prox_setor<num_setores):
                 
                 if env.now > fora_transitorio:
-                    valores[id_trem-1].setor.append(setor)
-                    valores[id_trem-1].instante.append(env.now)
+                    ArmazenarPosicao(id_trem, setor)
+                    ArmazenarInstante(id_trem, env)
                            
       
             #Passagem de informacoes a unidade controladora
-            aguarda_CCO = env.event()
-            CCO_queue.append(
+            aguarda_unidade_controle = env.event()
+            fila_unidade_controle.append(
                 [
                     id_trem,
                     dict(
-                        evento = aguarda_CCO,
+                        evento = aguarda_unidade_controle,
                         prox_setor = prox_setor,
                         dir = dir,
                         tipo_sb = sb
@@ -384,11 +419,11 @@ if simule:
             if env.now > fora_transitorio:
                 thp_inicio = env.now
             
-            printf("   Trem #%s aguardando liberação pelo CCO" % (id_trem) )   
-            Trigger_CCO()
+            printf("   Trem #%s aguardando liberação pelo UnidadeControle" % (id_trem) )   
+            AtualizarRequisicoes()
             
-            #Aguarda CCO liberar o trem para seguir
-            yield aguarda_CCO
+            #Aguarda UnidadeControle liberar o trem para seguir
+            yield aguarda_unidade_controle
             
             #Montagem do indicador THP
             if env.now > fora_transitorio and thp_inicio != -1:
@@ -396,17 +431,17 @@ if simule:
             
                 #Armazenamento do THP
                 if thp > 0:
-                    valores[id_trem-1].thp.append(thp)
+                    dados[id_trem-1].thp.append(thp)
                 
             #Atualizacao de setor
             sb_ant = sb
             
             #Retorno da unidade de controle sobre proximo tipo de SB
-            r = aguarda_CCO.value
+            r = aguarda_unidade_controle.value
             sb = r[0]
     
     
-            printf("   Trem #%s liberado pelo CCO para seguir até setor #%s na sb #%s" % (id_trem, prox_setor, sb) )
+            printf("   Trem #%s liberado pelo UnidadeControle para seguir até setor #%s na sb #%s" % (id_trem, prox_setor, sb) )
             
             #Trem já se encontra no trecho
             if(out==0):           
@@ -439,20 +474,21 @@ if simule:
                 
                 #Marco de inicio de deslocamento
                 if env.now > fora_transitorio:
-                    valores[id_trem-1].setor.append(setor)
-                    valores[id_trem-1].instante.append(env.now)
+                    ArmazenarPosicao(id_trem, setor)
+                    ArmazenarInstante(id_trem, env)
+
                 
                 #Tempo deslocamento na singela até liberar setor
-                yield env.timeout(timeOut('deslocamento')) #timeout(5)
+                yield env.timeout(timeOut('deslocamento'))
                 printf("   Trem #%s liberou setor anterior #%s em %s min" % (id_trem, setor, env.now)) 
             
                 if(setor>=0 and setor < num_setores):
                     ferrovia_linha[setor]["LINHA"][sb_ant][FERR_RECURSO].release(\
                                                     ferrovia_linha[setor]["LINHA"][sb_ant][FERR_REQ])
                 
-                Trigger_CCO()
+                AtualizarRequisicoes()
                 
-                yield env.timeout(timeOut('liberar_cauda')) #timeout(1)
+                yield env.timeout(timeOut('liberar_cauda'))
                         
                 #Momento para desalocar os Ti
                 if condicao == 0:
@@ -472,19 +508,20 @@ if simule:
                     print("Trem %d chegou a unidade de suprimento %d" % (id_trem,env.now))     
                     
                     if env.now > fora_transitorio:
-                        valores[id_trem-1].setor.append(setor)
-                        valores[id_trem-1].instante.append(env.now)
-                    
+                        ArmazenarPosicao(id_trem, setor)
+                        ArmazenarInstante(id_trem, env)
+                   
                     yield env.timeout(timeOut('deslocamento')) #timeout(5)
     
                     if env.now > fora_transitorio:
-                        valores[id_trem-1].setor.append(setor+1)
-                        valores[id_trem-1].instante.append(env.now)
+                        ArmazenarPosicao(id_trem, setor+1)
+                        ArmazenarInstante(id_trem, env)
+
                     yield env.timeout(timeOut('deslocamento')) #timeout(5)
     
                     if env.now > fora_transitorio:                
-                        valores[id_trem-1].setor.append(setor+1)
-                        valores[id_trem-1].instante.append(env.now)
+                        ArmazenarPosicao(id_trem, setor+1)
+                        ArmazenarInstante(id_trem, env)
                         
                     printf("   Trem #%s chegou no destino subindo (mina) " % (id_trem)) 
                     ferrovia_linha[setor]["LINHA"][sb][FERR_RECURSO].release(\
@@ -496,20 +533,21 @@ if simule:
                     #Chegada a unidade demandante            
                     print("Trem %d chegou a unidade demandante %d" % (id_trem,env.now))                
                     
-                    if env.now > fora_transitorio:                            
-                        valores[id_trem-1].setor.append(0)
-                        valores[id_trem-1].instante.append(env.now)
+                    if env.now > fora_transitorio:
+                        ArmazenarPosicao(id_trem, 0)
+                        ArmazenarInstante(id_trem, env)                            
+
                     yield env.timeout(timeOut('deslocamento')) 
     
                     if env.now > fora_transitorio:
-                        valores[id_trem-1].setor.append(-1)
-                        valores[id_trem-1].instante.append(env.now)
+                        ArmazenarPosicao(id_trem, -1)
+                        ArmazenarInstante(id_trem, env) 
     
                     yield env.timeout(timeOut('deslocamento')) 
                     
                     if env.now > fora_transitorio:
-                        valores[id_trem-1].setor.append(-1)
-                        valores[id_trem-1].instante.append(env.now)
+                        ArmazenarPosicao(id_trem, -1)
+                        ArmazenarInstante(id_trem, env) 
                     
                     printf("   Trem #%s chegou no destino descendo (porto) " % (id_trem)) 
                     ferrovia_linha[setor]["LINHA"][sb][FERR_RECURSO].release(\
@@ -523,33 +561,11 @@ if simule:
                 #Tempo deslocamento para chegar até setor
                 yield env.timeout(timeOut('deslocamento'))  
               
-    
-    #Configurador da ferrovia
-    def config_rail(env):
-        
-        global ferrovia, ferrovia_travessao,num_setores
-        printf("Criando pares de SBs da ferrovia...")
-        
-        for setor in range(num_setores):
-            data = dict()
-            data2 = dict()
-            #id = id da seção da bloqueio
-            #sb = coleção das duas SBs da seção
-            data2.update(id = setor,\
-                         TRAVESSAO = [[simpy.Resource(env,1),0,0,0],\
-                                    [simpy.Resource(env,1),0,0,0],\
-                                    [simpy.Resource(env,1),0,0,0]])        
-            data.update(id = setor, \
-                        LINHA = [[simpy.Resource(env,1),0,0,0],\
-                              [simpy.Resource(env,1),0,0,0]])
-            ferrovia_linha.append(data)
-            ferrovia_travessao.append(data2)
-        printf("Foram criados %s pares de SBs!" % (num_setores))
-    
+       
     
     env = simpy.Environment()
-    config_rail(env)
-    env.process(CCO(env))
+    ConfigurarFerrovia(env)
+    env.process(UnidadeControle(env))
   
     #Indisponibiliza setores
     for setor_ind in indisponiveis:
@@ -583,7 +599,7 @@ if simule:
         else:
             direcao = +1
         
-        env.process(trem(env=env,out=1,setor=setor_origem,dir=direcao,sb=-1))
+        env.process(Trem(env=env,out=1,setor=setor_origem,dir=direcao,sb=-1))
 
         
         
@@ -606,8 +622,7 @@ if simule:
         else:
             break
     
-    gerar_estatisticas()
-    
-    st.plotly_chart(fim_simulation(), use_container_width=True)
+    GerarEstatisticas()    
+    st.plotly_chart(GerarPlotagem(), use_container_width=True)
         
     
