@@ -621,7 +621,9 @@ if simule:
         else:
             break
     
-    GerarEstatisticas()    
-    st.plotly_chart(GerarPlotagem(), use_container_width=True)
         
+    st.plotly_chart(GerarPlotagem(), use_container_width=True)
+    GerarEstatisticas()
+    st.dataframe(data=statistics_df)
+    
     
