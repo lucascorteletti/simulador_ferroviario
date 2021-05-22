@@ -353,8 +353,8 @@ if simule:
         global num_trens, fila_unidade_controle,dados,origem_trens
       
         #sb: seção de bloqueio que o trem está localizado
-        #dir: direção em que o trem está seguindo {-1,1}
-        #out: trem fora da ferrovia {0,1}
+        #dir: direção em que o trem está seguindo {-1:descendo,1:subindo}
+        #out: trem fora da ferrovia {0:Dentro,1:Fora}
         
         criado_em = env.now #Momento de criação do trem
         num_trens += 1      #Id do novo trem criado
@@ -365,12 +365,14 @@ if simule:
         #Instante de última saida do porto
         chegada_porto = - 1
         
-        
+        #Gera estrutura de dados para a entidade
         dados.append(dados_trem([],[],[],"Trem_#" + str(id_trem)))
+        
         printf("   Trem #%s criado " % (id_trem) )
         AtualizarRequisicoes() 
         
         while(True):
+            
             #Instancia o trem na ferrovia, coleta primeiro setor
             if(out == 1):
                 prox_setor = setor
@@ -580,9 +582,8 @@ if simule:
   
     
     #Dispoe processos dos trens  
-    for veiculo in origem_veiculos: #num_veiculos
-        #Trem0-Setor0-Subindo
-        
+    for veiculo in origem_veiculos:
+       
         #Extracao do sentido
         delimitador1 = veiculo.find('-',0) + 1
         delimitador2 = veiculo.find('-',delimitador1)+1
@@ -591,9 +592,7 @@ if simule:
         
         setor_origem = int(veiculo[ setor_inicio:delimitador2-1 ])
         sentido = veiculo[delimitador2+1:]
-        
-
-        
+                
         if sentido == "Subindo":
             direcao = -1
         else:
