@@ -7,10 +7,10 @@ A nível de construção do simulador, a abstração do sistema pode ser exempli
 ![Figura 16_D](https://user-images.githubusercontent.com/38539533/119235663-fede1880-bb09-11eb-9b23-d7fac5672957.png)
 
 A partir disso, as principais premissas e considerações são:
--Cada setor possui um par seções de bloqueio (SBiA, SBiB) e um travessão universal composto de 3 seções de bloqueio (Ti1,Ti2,Ti3);
-  -Não há distinção entre as seções de bloqueio em termos de geometria e lógicas de funcionamento e alocação;
--Não há distinção entre os trens em quanto a locomotivas e vagões;
--Parte-se da premissa que os trens irão trafegar em ciclos dada demanda constante da unidade demandante e capacidade ilimitada da unidade de suprimento 
+- Cada setor possui um par seções de bloqueio (SBiA, SBiB) e um travessão universal composto de 3 seções de bloqueio (Ti1,Ti2,Ti3)
+  - Não há distinção entre as seções de bloqueio em termos de geometria e lógicas de funcionamento e alocação
+- Não há distinção entre os trens em quanto a locomotivas e vagões
+- Parte-se da premissa que os trens irão trafegar em ciclos dada demanda constante da unidade demandante e capacidade ilimitada da unidade de suprimento 
 
 
 ## Como funciona
