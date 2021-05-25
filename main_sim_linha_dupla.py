@@ -10,8 +10,7 @@ import base64
 #Definicao pagina streamlit
 st.title('Bem vindo ao simulador ferroviario!')
 
-st.markdown('Desenvolvida com SimPy, esta aplicação permite simular ferrovias do tipo dupla e singela.\
-        Entretanto, é importante ressaltar algumas considerações quanto a solução:')
+st.markdown('Ajuste as configurações a esquerda para prosseguir com a simulação')
 
 #Captura do tempo simulado
 tempo_simulado = st.sidebar.slider('Selecione o tempo a ser simulado (u.t)', 1,3000)
