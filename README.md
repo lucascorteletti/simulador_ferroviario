@@ -26,7 +26,7 @@ Os eventos possibitam a comunicação entre o processo da entidade e da unidade 
 
 
 ## Como utilizar
-Acesse: (em breve!)
+Acesse: https://share.streamlit.io/lucascorteletti/simulador_ferroviario/main/main_sim_linha_dupla.py
 
 ## Pontos relavantes
 A partir desse simulador é possível realizar a experimentação de diversos cenários envolvendo pontos de aleatoriedade entre velocidade do trem e do tipo de trem em circulação. Além disso, é possível avaliar tanto o efeito sobre disposição de linhas do tipo singela entre linhas duplas, reproduzindo indisponibilidades na via, como a quantidade e maneira desse arranjo perante indicadores e tempo médio de trânsito e trem hora parada (THP).
